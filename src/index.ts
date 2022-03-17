@@ -101,7 +101,7 @@ client.on(
               );
             });
             console.log(JSON.stringify(Array.from(userTimers.entries())));
-          }, 1000);
+          }, 60 * 1000);
 
           await interaction.reply(`Joined channel ${channel.name}`);
         } catch (error) {
