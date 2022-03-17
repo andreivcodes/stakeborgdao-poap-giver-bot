@@ -1,19 +1,21 @@
+import { SlashCommandBuilder } from "@discordjs/builders";
+import { REST } from "@discordjs/rest";
+import { Routes } from "discord-api-types/rest/v9";
+
 require("dotenv").config();
 const { Client } = require("discord.js");
 const {
-  NoSubscriberBehavior,
-  StreamType,
-  createAudioPlayer,
-  createAudioResource,
   entersState,
-  AudioPlayerStatus,
   VoiceConnectionStatus,
   joinVoiceChannel,
 } = require("@discordjs/voice");
+let table = require("text-table");
 
 let voiceConnection: any;
 let intervalObj: any;
 let userTimers: any;
+let connected: boolean;
+let owner: any;
 
 async function connectToChannel(channel: {
   id: any;
@@ -41,19 +43,48 @@ client.on("ready", async () => {
   console.log("discord.js client is ready!");
 });
 
+const commands = [
+  new SlashCommandBuilder()
+    .setName("poap_join")
+    .setDescription("bot joins the voice channel you're in"),
+  new SlashCommandBuilder()
+    .setName("poap_leave")
+    .setDescription("bot shows the users list and leaves the voice channel"),
+].map((command) => command.toJSON());
+
+const rest = new REST({ version: "9" }).setToken(`${process.env.TOKEN}`);
+
+rest
+  .put(
+    Routes.applicationGuildCommands(
+      `${process.env.CLIENTID}`,
+      `${process.env.SERVERID}`
+    ),
+    {
+      body: commands,
+    }
+  )
+  .then(() => console.log("Successfully registered application commands."))
+  .catch(console.error);
+
 client.on(
-  "messageCreate",
-  async (message: {
-    guild: any;
-    content: string;
-    member: { voice: { channel: any } };
-    reply: (arg0: string) => any;
+  "interactionCreate",
+  async (interaction: {
+    isCommand?: any;
+    member?: any;
+    reply?: any;
+    commandName?: any;
   }) => {
-    if (!message.guild) return;
-    if (message.content === "/poap_join") {
-      const channel = message.member?.voice.channel;
-      if (channel) {
+    if (!interaction.isCommand()) return;
+
+    const { commandName } = interaction;
+
+    if (commandName === "poap_join") {
+      const channel = interaction.member?.voice.channel;
+      if (channel && !connected) {
         try {
+          connected = true;
+          owner = interaction.member;
           voiceConnection = await connectToChannel(channel);
 
           userTimers = new Map();
@@ -61,46 +92,42 @@ client.on(
           intervalObj = setInterval(() => {
             console.log("Get users list");
             channel.members.each((member: any) => {
-              console.log(member.user.username);
+              console.log(member.user.tag);
               userTimers.set(
-                member.user.username,
-                userTimers.get(member.user.username)
-                  ? userTimers.get(member.user.username) + 1
+                member.user.tag,
+                userTimers.get(member.user.tag)
+                  ? userTimers.get(member.user.tag) + 1
                   : 1
               );
             });
             console.log(JSON.stringify(Array.from(userTimers.entries())));
           }, 1000);
 
-          await message.reply(`Joined channel ${channel.name}`);
+          await interaction.reply(`Joined channel ${channel.name}`);
         } catch (error) {
-          await message.reply(`${error}`);
+          await interaction.reply(`${error}`);
         }
       } else {
-        await message.reply("Join a voice channel then try again!");
+        await interaction.reply("Join a voice channel and try again!");
       }
-    } else if (message.content === "/poap_leave") {
+    } else if (commandName === "poap_leave" && interaction.member == owner) {
       try {
         clearInterval(intervalObj);
-        await message.reply(JSON.stringify(Array.from(userTimers.entries())));
+
+        await interaction.reply(
+          table(Array.from(userTimers.entries()), {
+            align: ["l", "r"],
+            hsep: "             |             ",
+          })
+        );
+
         voiceConnection.destroy();
-        await message.reply(`Left channel`);
+        connected = false;
       } catch (error) {
-        await message.reply(`${error}`);
-      }
-    } else if (message.content === "/poap_help") {
-      try {
-        await message.reply(
-          `/poap_join - bot joins the voice channel you're in`
-        );
-        await message.reply(
-          `/poap_leave - bot shows the users list and leaves the voice channel`
-        );
-      } catch (error) {
-        await message.reply(`${error}`);
+        await interaction.reply(`${error}`);
       }
     }
   }
 );
 
-void client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);
