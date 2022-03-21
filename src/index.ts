@@ -108,23 +108,30 @@ client.on(
           await interaction.reply(`${error}`);
         }
       } else {
-        await interaction.reply("Join a voice channel and try again!");
+        await interaction.reply(
+          "Sorry, I can't! I'm in a channel already or you're not in a voice channel."
+        );
       }
     } else if (commandName === "poap_leave" && interaction.member == owner) {
       try {
         clearInterval(intervalObj);
 
-        await interaction.reply(
-          table(Array.from(userTimers.entries()), {
-            align: ["l", "r"],
-            hsep: "             |             ",
-          })
-        );
+        let output = table(Array.from(userTimers.entries()), {
+          align: ["l", "r"],
+          hsep: "             |             ",
+        });
+
+        if (userTimers.size == 0)
+          output = "No users spent more than 1 minute in the voice chat.";
+
+        await interaction.reply(output);
 
         voiceConnection.destroy();
         connected = false;
       } catch (error) {
         await interaction.reply(`${error}`);
+        voiceConnection.destroy();
+        connected = false;
       }
     }
   }
