@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/rest/v9";
+import { StageInstance } from "discord.js";
 
 require("dotenv").config();
 const { Client } = require("discord.js");
@@ -15,7 +16,7 @@ let voiceConnection: any;
 let intervalObj: any;
 let userTimers: any;
 let connected: boolean;
-let owner: any;
+let channelOuput: string;
 
 async function connectToChannel(channel: {
   id: any;
@@ -41,6 +42,7 @@ const client = new Client({
 
 client.on("ready", async () => {
   console.log("discord.js client is ready!");
+  channelOuput = "912365656719114330";
 });
 
 const commands = [
@@ -67,74 +69,65 @@ rest
   .then(() => console.log("Successfully registered application commands."))
   .catch(console.error);
 
-client.on(
-  "interactionCreate",
-  async (interaction: {
-    isCommand?: any;
-    member?: any;
-    reply?: any;
-    commandName?: any;
-  }) => {
-    if (!interaction.isCommand()) return;
+client.on("stageInstanceCreate", async (stageInstance: StageInstance) => {
+  const channel = stageInstance.channel;
+  if (channel && !connected) {
+    try {
+      connected = true;
+      voiceConnection = await connectToChannel(channel);
 
-    const { commandName } = interaction;
+      userTimers = new Map();
 
-    if (commandName === "poap_join") {
-      const channel = interaction.member?.voice.channel;
-      if (channel && !connected) {
-        try {
-          connected = true;
-          owner = interaction.member;
-          voiceConnection = await connectToChannel(channel);
-
-          userTimers = new Map();
-
-          intervalObj = setInterval(() => {
-            console.log("Get users list");
-            channel.members.each((member: any) => {
-              console.log(member.user.tag);
-              userTimers.set(
-                member.user.tag,
-                userTimers.get(member.user.tag)
-                  ? userTimers.get(member.user.tag) + 1
-                  : 1
-              );
-            });
-            console.log(JSON.stringify(Array.from(userTimers.entries())));
-          }, 60 * 1000);
-
-          await interaction.reply(`Joined channel ${channel.name}`);
-        } catch (error) {
-          await interaction.reply(`${error}`);
-        }
-      } else {
-        await interaction.reply(
-          "Sorry, I can't! I'm in a channel already or you're not in a voice channel."
-        );
-      }
-    } else if (commandName === "poap_leave" && interaction.member == owner) {
-      try {
-        clearInterval(intervalObj);
-
-        let output = table(Array.from(userTimers.entries()), {
-          align: ["l", "r"],
-          hsep: "             |             ",
+      intervalObj = setInterval(() => {
+        console.log("Get users list");
+        channel.members.each((member: any) => {
+          console.log(member.user.tag);
+          userTimers.set(
+            member.user.tag,
+            userTimers.get(member.user.tag)
+              ? userTimers.get(member.user.tag) + 1
+              : 1
+          );
         });
+        console.log(JSON.stringify(Array.from(userTimers.entries())));
+      }, 60 * 1000);
 
-        if (userTimers.size == 0)
-          output = "No users spent more than 1 minute in the voice chat.";
-
-        await interaction.reply(output);
-
-        voiceConnection.destroy();
-        connected = false;
-      } catch (error) {
-        await interaction.reply(`${error}`);
-        voiceConnection.destroy();
-        connected = false;
-      }
+      await client.channels.cache
+        .get(channelOuput)
+        .send(`Joined channel ${channel.name}`);
+    } catch (error) {
+      client.channels.cache.get(channelOuput).send(`${error}`);
     }
+  } else {
+    await client.channels.cache
+      .get(channelOuput)
+      .send(
+        "Sorry, I can't! I'm in a channel already or you're not in a voice channel."
+      );
   }
-);
+});
+
+client.on("stageInstanceDelete", async (stageInstance: StageInstance) => {
+  try {
+    clearInterval(intervalObj);
+
+    let output = table(Array.from(userTimers.entries()), {
+      align: ["l", "r"],
+      hsep: "             |             ",
+    });
+
+    if (userTimers.size == 0)
+      output = "No users spent more than 1 minute in the voice chat.";
+
+    await client.channels.cache.get(channelOuput).send(output);
+
+    voiceConnection.destroy();
+    connected = false;
+  } catch (error) {
+    await client.channels.cache.get(channelOuput).send(`${error}`);
+    voiceConnection.destroy();
+    connected = false;
+  }
+});
 
 client.login(process.env.TOKEN);
