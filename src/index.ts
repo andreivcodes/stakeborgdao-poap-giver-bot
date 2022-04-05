@@ -111,15 +111,26 @@ client.on("stageInstanceDelete", async (stageInstance: StageInstance) => {
   try {
     clearInterval(intervalObj);
 
-    let output = table(Array.from(userTimers.entries()), {
-      align: ["l", "r"],
-      hsep: "             |             ",
-    });
+    let output;
 
-    if (userTimers.size == 0)
+    if (userTimers.size == 0) {
       output = "No users spent more than 1 minute in the voice chat.";
+      await client.channels.cache.get(channelOuput).send(output);
+    }
 
-    await client.channels.cache.get(channelOuput).send(output);
+    let userTimersArray = Array.from(userTimers.entries());
+
+    const chunkSize = 10;
+    for (let i = 0; i < userTimersArray.length; i += chunkSize) {
+      const chunk = userTimersArray.slice(i, i + chunkSize);
+
+      output = table(chunk, {
+        align: ["l", "r"],
+        hsep: " - ",
+      });
+
+      await client.channels.cache.get(channelOuput).send(output);
+    }
 
     voiceConnection.destroy();
     connected = false;
